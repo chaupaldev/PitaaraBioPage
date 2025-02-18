@@ -9,8 +9,7 @@ export async function middleware(request: NextRequest) {
   // If authenticated, redirect away from auth pages to dashboard
   if (
     token &&
-    (pathname.startsWith("/sign-in") ||
-      pathname === "/"
+    (pathname.startsWith("/sign-in")
     )
   ) {
     return NextResponse.redirect(new URL("/dashboard", request.url));

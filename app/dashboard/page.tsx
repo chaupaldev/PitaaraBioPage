@@ -1,30 +1,56 @@
-'use client';
-import { useState } from "react";
+"use client";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-
-// Import your Zod schema
-import { linkSchema } from "@/schemas/linksSchema"; // Update the path to your schema
 import { z } from "zod";
+import { Trash2 } from "lucide-react";
 
-// Define types from Zod schema
+// Define schema
+const linkSchema = z.object({
+  reelUrl: z.string().url({ message: "Invalid Instagram Reel URL" }),
+  youtubeUrl: z.string().url({ message: "Invalid YouTube URL" }),
+});
+
 type LinkFormData = z.infer<typeof linkSchema>;
 
 const Dashboard = () => {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [links, setLinks] = useState<any[]>([]); // Store added links
+  const [links, setLinks] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<LinkFormData>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<LinkFormData>({
     resolver: zodResolver(linkSchema),
   });
 
-  // Fetch the thumbnail from the external API based on Instagram URL
-  const fetchThumbnail = async (url: string) => {
+  // Fetch all links when the dashboard loads
+  useEffect(() => {
+    fetchLinks();
+  }, []);
+
+  const fetchLinks = async () => {
     try {
-      const response = await axios.get(`/api/getThumbnail?url=${encodeURIComponent(url)}`);
+      const response = await fetch("/api/links"); // Ensure this matches your API route
+      if (!response.ok) throw new Error("Failed to fetch Links");
+
+      const data = await response.json();
+      setLinks(data.links || []);
+    } catch (error) {
+      setError("Failed to fetch links.");
+    }
+  };
+
+  // Fetch the thumbnail from an external API
+  const fetchThumbnail = async (reelUrl: string) => {
+    try {
+      const response = await axios.get(
+        `/api/getThumbnail?url=${encodeURIComponent(reelUrl)}`
+      );
       return response.data.thumbnail;
     } catch (error) {
       setError("Failed to fetch Instagram thumbnail.");
@@ -36,35 +62,34 @@ const Dashboard = () => {
     if (loading) return;
 
     setLoading(true);
+    setError(null);
 
-    const { url, thumbnail } = data;
+    const { reelUrl, youtubeUrl } = data;
 
-    let fetchedThumbnail = await fetchThumbnail(url);
-
+    let fetchedThumbnail = await fetchThumbnail(reelUrl);
     if (!fetchedThumbnail) {
       setLoading(false);
       return;
     }
 
     try {
-      // Send POST request to add the link with thumbnail
-      const response = await axios.post("/api/links", {
-        url,
+      await axios.post("/api/links", {
+        url: youtubeUrl,
         thumbnail: fetchedThumbnail,
       });
 
-      setLinks((prevLinks) => [...prevLinks, response.data]); // Add new link to the list
-      setThumbnailUrl(fetchedThumbnail); // Set the thumbnail URL for preview
-      setLoading(false);
+      reset(); // Clear the form after submission
+      fetchLinks(); // Refresh links after adding a new one
     } catch (error) {
-      setLoading(false);
       setError("Failed to add link.");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await axios.delete(`/api/links/${id}`); // Assuming DELETE route exists for links
+      await axios.delete(`/api/links?id=${id}`);
       setLinks((prevLinks) => prevLinks.filter((link) => link._id !== id));
     } catch (error) {
       setError("Failed to delete link.");
@@ -72,75 +97,87 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="container mx-auto p-8 space-y-6 text-black">
-      <h1 className="text-3xl font-semibold text-center text-gray-800">Dashboard</h1>
+    <div className="container mx-auto p-8 space-y-6">
+      <h1 className="text-3xl font-semibold text-center  text-white">
+        Dashboard
+      </h1>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="bg-white p-6 rounded-lg shadow-lg space-y-4">
+      {/* Form */}
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="bg-gray-300 p-6 rounded-lg shadow-lg space-y-4"
+      >
         <div>
-          <label htmlFor="url" className="block text-sm font-medium text-gray-700">Instagram Reel URL</label>
+          <label
+            htmlFor="reelUrl"
+            className="block text-sm font-medium text-gray-700 sm:text-2xl"
+          >
+            Instagram Reel URL
+          </label>
           <input
             type="text"
-            id="url"
-            {...register("url")}
+            id="reelUrl"
+            {...register("reelUrl")}
             placeholder="Enter Instagram Reel URL"
             className="w-full p-3 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {errors.url && <p className="text-red-500 text-sm">{errors.url.message}</p>}
+          {errors.reelUrl && (
+            <p className="text-red-500 text-sm">{errors.reelUrl.message}</p>
+          )}
         </div>
 
         <div>
-          <label htmlFor="thumbnail" className="block text-sm font-medium text-gray-700">YouTube URL</label>
+          <label
+            htmlFor="youtubeUrl"
+            className="block text-sm font-medium text-gray-700 sm:text-2xl"
+          >
+            YouTube URL
+          </label>
           <input
             type="text"
-            id="thumbnail"
-            {...register("thumbnail")}
+            id="youtubeUrl"
+            {...register("youtubeUrl")}
             placeholder="Enter YouTube URL"
             className="w-full p-3 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {errors.thumbnail && <p className="text-red-500 text-sm">{errors.thumbnail.message}</p>}
+          {errors.youtubeUrl && (
+            <p className="text-red-500 text-sm">{errors.youtubeUrl.message}</p>
+          )}
         </div>
-
-        {thumbnailUrl && (
-          <div className="flex flex-col items-center mt-4">
-            <p className="text-sm text-gray-600">Thumbnail Preview:</p>
-            <img src={thumbnailUrl} alt="Thumbnail Preview" className="w-32 h-32 mt-2 object-cover rounded-md" />
-          </div>
-        )}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full p-3 mt-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-gray-400"
+          className=" px-8 py-3 mt-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-gray-400"
         >
-          {loading ? 'Adding...' : 'Add Link'}
+          {loading ? "Adding..." : "Add Link"}
         </button>
       </form>
 
       {error && <p className="text-center text-red-500">{error}</p>}
 
-      <h2 className="text-2xl font-medium text-gray-800">Added Links</h2>
-      <div className="space-y-4">
-        {links.length > 0 ? (
-          links.map((link) => (
-            <div key={link._id} className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm">
-              <div className="flex items-center space-x-4">
-                <img src={link.thumbnail} alt="Link Thumbnail" className="w-12 h-12 object-cover rounded-md" />
-                <div>
-                  <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{link.url}</a>
-                  <p className="text-sm text-gray-600 mt-1">YouTube: <a href={link.thumbnail} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{link.youtubeUrl}</a></p>
-                </div>
+      {/* Added Links */}
+      <h2 className="text-3xl font-extrabold text-center text-white-800">Added Reels</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 w-full max-w-4xl">
+        {links.map((reel) => (
+       
+            <div className="relative w-full aspect-[9/16] overflow-hidden rounded-lg shadow-lg">
+              <img
+                src={reel.thumbnail}
+                alt="Reel Thumbnail"
+                className="absolute inset-0 w-full h-full object-cover rounded-xl"
+              />
+              {/* Always Visible Overlay with Text at Bottom */}
+              <div className="absolute bottom-0 w-full bg-black bg-opacity-70 p-2 text-center">
+                <button
+                  onClick={() => handleDelete(reel._id)}
+                  className="text-red-500 text-2xl font-extrabold hover:text-red-700"
+                >
+                  DELETE
+                </button>{" "}
               </div>
-              <button
-                onClick={() => handleDelete(link._id)}
-                className="text-red-500 hover:text-red-700"
-              >
-                Delete
-              </button>
             </div>
-          ))
-        ) : (
-          <p className="text-gray-600">No links added yet.</p>
-        )}
+        ))}
       </div>
     </div>
   );

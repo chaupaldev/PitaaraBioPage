@@ -2,8 +2,6 @@ import mongoose, { model, Schema, models } from "mongoose";
 
 export interface ILink {
     url: string;
-    title: string;
-    description?: string;
     thumbnail?: string;
     createdAt?: Date;
     _id?: mongoose.Types.ObjectId;
@@ -14,11 +12,11 @@ const linkSchema = new Schema<ILink>(
         url: {
             type: String,
             required: true,
-            unique: true,
         },
        
         thumbnail: {
             type: String,
+            required: true,
         },
     },
     { timestamps: true }
