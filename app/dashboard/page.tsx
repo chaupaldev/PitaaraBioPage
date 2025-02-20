@@ -119,7 +119,7 @@ const Dashboard = () => {
             id="reelUrl"
             {...register("reelUrl")}
             placeholder="Enter Instagram Reel URL"
-            className="w-full p-3 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full p-3 mt-2 text-black border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {errors.reelUrl && (
             <p className="text-red-500 text-sm">{errors.reelUrl.message}</p>
@@ -138,7 +138,7 @@ const Dashboard = () => {
             id="youtubeUrl"
             {...register("youtubeUrl")}
             placeholder="Enter YouTube URL"
-            className="w-full p-3 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full p-3 mt-2 border text-black border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {errors.youtubeUrl && (
             <p className="text-red-500 text-sm">{errors.youtubeUrl.message}</p>

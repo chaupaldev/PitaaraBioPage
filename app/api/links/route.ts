@@ -20,10 +20,13 @@ export async function GET() {
             links
         })
     } catch (error) {
+        console.log(error)
         return NextResponse.json(
             { error: "Failed to fetch links" },
             { status: 200 }
         )
+        console.log(error)
+
     }
 }
 
@@ -75,8 +78,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
-        // Extract the 'id' from the URL search params
-        const id = request.nextUrl.searchParams.get('id'); // Using .get() to extract 'id' from query parameters
+        const id = request.nextUrl.searchParams.get('id'); 
 
         if (!id) {
             return NextResponse.json(
@@ -85,7 +87,6 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        // Convert the id to an ObjectId for MongoDB
         let objectId;
         try {
             objectId = new ObjectId(id);
