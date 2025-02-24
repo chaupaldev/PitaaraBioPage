@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import logo from "@/assets/images/pitaara logo.jpg";
+import PropagateLoader from "react-spinners/PropagateLoader";
 
 export default function Home() {
   const [reels, setReels] = useState<{ id: string; thumbnail: string; url: string }[]>([]);
@@ -34,7 +35,8 @@ export default function Home() {
       <h1 className="text-3xl font-bold">Latest Reels</h1>
 
       {/* Loading State */}
-      {loading && <p className="mt-4">Loading reels...</p>}
+      
+      {loading && <PropagateLoader className="mt-10" color="#D00A8E"/>}
       
       {/* Error State */}
       {error && <p className="mt-4 text-red-500">{error}</p>}
