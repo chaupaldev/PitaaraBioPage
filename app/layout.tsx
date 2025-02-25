@@ -19,8 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "My Awesome Next.js App", // Change to your app name
-  description: "This is a Next.js app built with modern technologies",
+  title: "Pitaara Link in Bio Page", //
+  description: "This is Pitaara Link in Bio Page",
 };
 
 export default function RootLayout({
@@ -31,10 +31,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* You can add more head tags here */}
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* ToastContainer to show toasts globally */}
         <ToastContainer 
           position="top-right" 
           autoClose={5000} 
