@@ -2,83 +2,86 @@ import { authOptions } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
 import Link from "@/models/Links";
 import { getServerSession } from "next-auth";
-import { getRedirectTypeFromError } from "next/dist/client/components/redirect";
-import { ObjectId } from "mongodb";
 import { NextRequest, NextResponse } from "next/server";
-
+import cloudinary from "@/lib/cloudinary";
+import { ObjectId } from "mongodb";
 
 export async function GET() {
     try {
-        await connectToDatabase()
-        const links = await Link.find({}).sort({ createdAt: -1 }).lean()
-        if (!links || links.length === 0) {
-            return NextResponse.json(
-                [],
-                { status: 200 }
-            )
-        } return NextResponse.json({
-            links
-        })
-    } catch (error) {
-        console.log(error)
-        return NextResponse.json(
-            { error: "Failed to fetch links" },
-            { status: 200 }
-        )
-        console.log(error)
+        await connectToDatabase();
+        const links = await Link.find({}).sort({ createdAt: -1 }).lean();
 
+        return NextResponse.json({ links }, { status: 200 });
+    } catch (error) {
+        console.error(error);
+        return NextResponse.json({ error: "Failed to fetch links" }, { status: 500 });
     }
 }
 
 export async function POST(request: NextRequest) {
     try {
-        // Check user session if needed (for authentication)
+        // Check user session
         const session = await getServerSession(authOptions);
         if (!session) {
-            return NextResponse.json(
-                { success: false, message: "Unauthorized" },
-                { status: 401 }
-            );
+            return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
         }
 
         const { url, thumbnail } = await request.json();
-
         if (!url || !thumbnail) {
-            return NextResponse.json(
-                { success: false, message: "Url and thumbnail are required" },
-                { status: 400 }
-            );
+            return NextResponse.json({ success: false, message: "Url and thumbnail are required" }, { status: 400 });
         }
+
+        // Download the thumbnail from Instagram CDN
+        const response = await fetch(thumbnail, {
+            headers: { "User-Agent": "Mozilla/5.0" }, // Mimic a browser request
+        });
+
+        if (!response.ok) {
+            return NextResponse.json({ success: false, message: "Failed to download thumbnail" }, { status: 400 });
+        }
+
+        const buffer = await response.arrayBuffer();
+        const imageBase64 = Buffer.from(buffer).toString("base64");
+
+        // Upload to Cloudinary
+        const uploadResponse = await cloudinary.uploader.upload(`data:image/jpeg;base64,${imageBase64}`, {
+            folder: "thumbnails",
+        });
+
+        if (!uploadResponse.secure_url) {
+            return NextResponse.json({ success: false, message: "Failed to upload to Cloudinary" }, { status: 500 });
+        }
+
+        const cloudinaryUrl = uploadResponse.secure_url;
 
         // Connect to the database
         await connectToDatabase();
 
-        // Create a new link document
+        // Store the Cloudinary URL instead of the Instagram link
         const newLink = new Link({
             url,
-            thumbnail,
+            thumbnail: cloudinaryUrl,
             createdAt: new Date(),
         });
 
-        // Save the link to the database
         await newLink.save();
 
-        return NextResponse.json(
-            { success: true, message: "Link added successfully", link: newLink },
-            { status: 201 }
-        );
+        return NextResponse.json({ success: true, message: "Link added successfully", link: newLink }, { status: 201 });
+
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error("Error:", error);
         return NextResponse.json(
-            { success: false, message: "Failed to add link", error: errorMessage },
+            { success: false, message: "Failed to add link", error: error instanceof Error ? error.message : "Unknown error" },
             { status: 500 }
         );
     }
 }
 
+
+
 export async function DELETE(request: NextRequest) {
     try {
-        const id = request.nextUrl.searchParams.get('id'); 
+        const id = request.nextUrl.searchParams.get("id");
 
         if (!id) {
             return NextResponse.json(
@@ -100,21 +103,42 @@ export async function DELETE(request: NextRequest) {
         // Connect to the database
         await connectToDatabase();
 
-        // Try to delete the link by its ObjectId
-        const result = await Link.deleteOne({ _id: objectId });
+        // Find the link to get the Cloudinary URL
+        const link = await Link.findById(objectId);
 
-        if (result.deletedCount === 0) {
+        if (!link) {
             return NextResponse.json(
                 { success: false, message: "Link not found" },
                 { status: 404 }
             );
         }
 
+        // Extract Cloudinary public ID from the URL
+        const cloudinaryUrl = link.thumbnail;
+        const publicIdMatch = cloudinaryUrl.match(/\/thumbnails\/(.+)\.\w+$/);
+
+        if (!publicIdMatch) {
+            return NextResponse.json(
+                { success: false, message: "Invalid Cloudinary URL format" },
+                { status: 500 }
+            );
+        }
+
+        const publicId = `thumbnails/${publicIdMatch[1]}`;
+
+        // Delete the image from Cloudinary
+        await cloudinary.uploader.destroy(publicId);
+
+        // Delete the document from MongoDB
+        await Link.deleteOne({ _id: objectId });
+
         return NextResponse.json(
-            { success: true, message: "Link deleted successfully" },
+            { success: true, message: "Link and thumbnail deleted successfully" },
             { status: 200 }
         );
+
     } catch (error) {
+        console.error("Error:", error);
         return NextResponse.json(
             { success: false, message: "Failed to delete link", error: error instanceof Error ? error.message : "Unknown error" },
             { status: 500 }
