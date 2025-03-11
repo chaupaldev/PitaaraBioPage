@@ -6,12 +6,31 @@ import { NextRequest, NextResponse } from "next/server";
 import cloudinary from "@/lib/cloudinary";
 import { ObjectId } from "mongodb";
 
-export async function GET() {
+export async function GET(req:NextRequest) {
     try {
         await connectToDatabase();
-        const links = await Link.find({}).sort({ createdAt: -1 }).lean();
 
-        return NextResponse.json({ links }, { status: 200 });
+        // Extract page and limit from query params (with defaults)
+        const { searchParams } = new URL(req.url);
+        const page = parseInt(searchParams.get("page") || "1");
+        const limit = parseInt(searchParams.get("limit") || "6");
+
+        // Calculate number of documents to skip
+        const skip = (page - 1) * limit;
+
+        // Fetch paginated links sorted by createdAt
+        const links = await Link.find({})
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        // Check if there are more links
+        const totalLinks = await Link.countDocuments();
+        const hasMore = skip + limit < totalLinks;
+
+        return NextResponse.json({ links, hasMore }, { status: 200 });
+        
     } catch (error) {
         console.error(error);
         return NextResponse.json({ error: "Failed to fetch links" }, { status: 500 });

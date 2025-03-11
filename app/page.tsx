@@ -1,31 +1,53 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Image from "next/image";
 import logo from "@/assets/images/pitaara logo.jpg";
 import PropagateLoader from "react-spinners/PropagateLoader";
 
 export default function Home() {
-  const [reels, setReels] = useState<{ id: string; thumbnail: string; url: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [reels, setReels] = useState<{ _id: string; thumbnail: string; url: string }[]>([]);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // Fetch reels
+  const fetchReels = useCallback(async () => {
+    if (loading || !hasMore) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/links?page=${page}`);
+      if (!response.ok) throw new Error("Failed to fetch reels");
+
+      const data = await response.json();
+      if (data.links.length === 0) setHasMore(false);
+
+      setReels((prev) => [...prev, ...data.links]);
+      setPage((prev) => prev + 1);
+    } catch (err) {
+      console.error("Failed to load reels");
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, hasMore, page]);
+
+  // Observe the sentinel div
   useEffect(() => {
-    const fetchReels = async () => { 
-      try {
-        const response = await fetch("/api/links"); // Ensure this matches your API route
-        if (!response.ok) throw new Error("Failed to fetch reels");
-        
-        const data = await response.json();
-        setReels(data.links || []);
-      } catch (err) {
-        setError("Failed to load reels");
-      } finally {
-        setLoading(false);
-      }
-    };
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchReels();
+        }
+      },
+      { threshold: 1.0 }
+    );
 
-    fetchReels();
-  }, []);
+    if (sentinelRef.current) observerRef.current.observe(sentinelRef.current);
+
+    return () => observerRef.current?.disconnect();
+  }, [fetchReels]);
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-gray-900 text-white p-6">
@@ -34,41 +56,35 @@ export default function Home() {
 
       <h1 className="text-3xl font-bold">Latest Reels</h1>
 
-      {/* Loading State */}
-      
-      {loading && <PropagateLoader className="mt-10" color="#D00A8E"/>}
-      
-      {/* Error State */}
-      {error && <p className="mt-4 text-red-500">{error}</p>}
-
       {/* Reel Grid */}
-      {!loading && !error && reels.length > 0 ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 w-full max-w-4xl">
-          {reels.map((reel) => (
-            <a
-              key={reel.id}
-              href={reel.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="relative group w-full"
-            >
-              <div className="relative w-full aspect-[9/16] overflow-hidden rounded-lg shadow-lg">
-                <img
-                  src={reel.thumbnail}
-                  alt="Reel Thumbnail"
-                  className="absolute inset-0 w-full h-full object-cover rounded-xl"
-                />
-                {/* Always Visible Overlay with Text at Bottom */}
-                <div className="absolute bottom-0 w-full bg-black bg-opacity-80 p-2 text-center">
-                  <span className="text-yellow-300 text-lg font-bold">Click to watch full video</span>
-                </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 w-full max-w-4xl">
+        {reels.map((reel) => (
+          <a key={reel._id} href={reel.url} target="_blank" rel="noopener noreferrer" className="relative group w-full">
+            <div className="relative w-full aspect-[9/16] overflow-hidden rounded-lg shadow-lg">
+              <Image
+                src={reel.thumbnail}
+                alt="Reel Thumbnail"
+                fill
+                className="rounded-xl object-cover"
+                loading="lazy"
+                sizes="(max-width: 768px) 100vw, 33vw"
+              />
+              <div className="absolute bottom-0 w-full bg-black bg-opacity-80 p-2 text-center">
+                <span className="text-yellow-300 text-lg font-bold">Click to watch full video</span>
               </div>
-            </a>
-          ))}
-        </div>
-      ) : (
-        !loading && <p className="mt-4 text-gray-400">No reels available.</p>
-      )}
+            </div>
+          </a>
+        ))}
+      </div>
+
+      {/* Loader */}
+      {loading && <PropagateLoader color="#D00A8E" className="mt-6" />}
+
+      {/* Sentinel (Hidden div that triggers fetch on scroll) */}
+      <div ref={sentinelRef} className="h-10 w-full"></div>
+
+      {/* End Message */}
+      {!hasMore && <p className="mt-4 text-gray-400 text-center">No more reels available.</p>}
     </div>
   );
 }
