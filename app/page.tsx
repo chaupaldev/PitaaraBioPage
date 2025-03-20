@@ -7,7 +7,7 @@ import PropagateLoader from "react-spinners/PropagateLoader";
 export default function Home() {
   const [reels, setReels] = useState<{ _id: string; thumbnail: string; url: string }[]>([]);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); 
   const [hasMore, setHasMore] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);

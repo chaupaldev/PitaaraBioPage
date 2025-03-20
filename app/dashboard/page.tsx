@@ -1,10 +1,12 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Trash2 } from "lucide-react";
+import { PropagateLoader } from "react-spinners";
+import Image from "next/image";
 
 // Define schema
 const linkSchema = z.object({
@@ -16,8 +18,12 @@ type LinkFormData = z.infer<typeof linkSchema>;
 
 const Dashboard = () => {
   const [links, setLinks] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const {
     register,
@@ -28,22 +34,42 @@ const Dashboard = () => {
     resolver: zodResolver(linkSchema),
   });
 
-  // Fetch all links when the dashboard loads
-  useEffect(() => {
-    fetchLinks();
-  }, []);
+  // Fetch paginated links
+  const fetchLinks = useCallback(async () => {
+    if (loading || !hasMore) return;
 
-  const fetchLinks = async () => {
+    setLoading(true);
     try {
-      const response = await fetch("/api/links"); // Ensure this matches your API route
-      if (!response.ok) throw new Error("Failed to fetch Links");
+      const response = await fetch(`/api/links?page=${page}`);
+      if (!response.ok) throw new Error("Failed to fetch links");
 
       const data = await response.json();
-      setLinks(data.links || []);
+      if (data.links.length === 0) setHasMore(false);
+
+      setLinks((prev) => [...prev, ...data.links]);
+      setPage((prev) => prev + 1);
     } catch (error) {
       setError("Failed to fetch links.");
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [loading, hasMore, page]);
+
+  // Observe the sentinel div for infinite scrolling
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchLinks();
+        }
+      },
+      { threshold: 1.0 }
+    );
+
+    if (sentinelRef.current) observerRef.current.observe(sentinelRef.current);
+
+    return () => observerRef.current?.disconnect();
+  }, [fetchLinks]);
 
   // Fetch the thumbnail from an external API
   const fetchThumbnail = async (reelUrl: string) => {
@@ -65,7 +91,6 @@ const Dashboard = () => {
     setError(null);
 
     const { reelUrl, youtubeUrl } = data;
-
     let fetchedThumbnail = await fetchThumbnail(reelUrl);
     if (!fetchedThumbnail) {
       setLoading(false);
@@ -78,8 +103,11 @@ const Dashboard = () => {
         thumbnail: fetchedThumbnail,
       });
 
-      reset(); // Clear the form after submission
-      fetchLinks(); // Refresh links after adding a new one
+      reset();
+      setLinks([]); // Reset links to refetch from the first page
+      setPage(1);
+      setHasMore(true);
+      fetchLinks();
     } catch (error) {
       setError("Failed to add link.");
     } finally {
@@ -97,17 +125,17 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="container mx-auto p-8 space-y-6">
-      <h1 className="text-3xl font-semibold text-center  text-white">
+    <div className="container mx-auto p-8 space-y-6 lg:px-40">
+      <h1 className="text-3xl font-semibold text-center text-white">
         Dashboard
       </h1>
 
       {/* Form */}
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="bg-gray-300 p-6 rounded-lg shadow-lg space-y-4"
+        className="bg-gray-300 p-6 rounded-lg shadow-lg space-y-4 flex flex-col items-center"
       >
-        <div>
+        <div className="w-full">
           <label
             htmlFor="reelUrl"
             className="block text-sm font-medium text-gray-700 sm:text-2xl"
@@ -126,7 +154,7 @@ const Dashboard = () => {
           )}
         </div>
 
-        <div>
+        <div className="w-full">
           <label
             htmlFor="youtubeUrl"
             className="block text-sm font-medium text-gray-700 sm:text-2xl"
@@ -138,7 +166,7 @@ const Dashboard = () => {
             id="youtubeUrl"
             {...register("youtubeUrl")}
             placeholder="Enter YouTube URL"
-            className="w-full p-3 mt-2 border text-black border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full p-3 mt-2 text-black border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {errors.youtubeUrl && (
             <p className="text-red-500 text-sm">{errors.youtubeUrl.message}</p>
@@ -148,7 +176,7 @@ const Dashboard = () => {
         <button
           type="submit"
           disabled={loading}
-          className=" px-8 py-3 mt-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-gray-400"
+          className="px-16 py-3 mt-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-gray-400"
         >
           {loading ? "Adding..." : "Add Link"}
         </button>
@@ -157,28 +185,52 @@ const Dashboard = () => {
       {error && <p className="text-center text-red-500">{error}</p>}
 
       {/* Added Links */}
-      <h2 className="text-3xl font-extrabold text-center text-white-800">Added Reels</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 w-full max-w-4xl">
+      <h2 className="text-3xl font-extrabold text-center text-white">
+        Added Reels
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 lg:gap-8 mt-6 w-full lg:px-40">
         {links.map((reel) => (
-       
-            <div className="relative w-full aspect-[9/16] overflow-hidden rounded-lg shadow-lg">
-              <img
-                src={reel.thumbnail}
-                alt="Reel Thumbnail"
-                className="absolute inset-0 w-full h-full object-cover rounded-xl"
-              />
-              {/* Always Visible Overlay with Text at Bottom */}
-              <div className="absolute bottom-0 w-full bg-black bg-opacity-70 p-2 text-center">
-                <button
-                  onClick={() => handleDelete(reel._id)}
-                  className="text-red-500 text-2xl font-extrabold hover:text-red-700"
-                >
-                  DELETE
-                </button>{" "}
+          <div key={reel._id} className="relative">
+            <a
+              href={reel.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative group w-full"
+            >
+              <div className="relative w-full aspect-[9/16] overflow-hidden rounded-lg shadow-lg">
+                <Image
+                  src={reel.thumbnail}
+                  alt="Reel Thumbnail"
+                  fill
+                  className="rounded-xl object-cover"
+                  loading="lazy"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
               </div>
-            </div>
+            </a>
+            <button
+              onClick={() => handleDelete(reel._id)}
+              className="absolute bottom-0 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-90 text-red-500 text-xl font-bold w-full py-2 rounded hover:bg-gray-900"
+            >
+              DELETE
+            </button>
+          </div>
         ))}
       </div>
+
+      {/* Loader */}
+      {loading && (
+        <PropagateLoader color="#D00A8E" className="mt-6 text-center" />
+      )}
+
+      {/* Sentinel for infinite scrolling */}
+      <div ref={sentinelRef} className="h-10 w-full"></div>
+
+      {!hasMore && (
+        <p className="mt-4 text-gray-400 text-center">
+          No more reels available.
+        </p>
+      )}
     </div>
   );
 };
